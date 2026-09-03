@@ -16,6 +16,18 @@ test('rate limiter trips per IP and per DOI', () => {
   assert.equal(limiter.check('1.1.1.1', '10.1/c').scope, 'ip')
 })
 
+test('scan rate limit inspects every DOI and burns one IP token', () => {
+  const limiter = createRateLimiter({ windowMs: 60_000, ipMax: 2, doiMax: 1 })
+  assert.equal(limiter.checkMany('2.2.2.2', ['10.1/a', '10.1/b']).ok, true)
+  const repeat = limiter.checkMany('2.2.2.2', ['10.1/c', '10.1/a'])
+  assert.equal(repeat.ok, false)
+  assert.equal(repeat.scope, 'doi')
+  assert.equal(limiter.checkMany('2.2.2.2', ['10.1/d', '10.1/e']).ok, true)
+  const ipTrip = limiter.checkMany('2.2.2.2', ['10.1/f'])
+  assert.equal(ipTrip.ok, false)
+  assert.equal(ipTrip.scope, 'ip')
+})
+
 test('body reader rejects oversized verify payloads', async () => {
   const huge = 'x'.repeat(VERIFY_BODY_LIMIT + 8)
   await assert.rejects(readJsonBody(new Request('https://enrich.local/api/verify', { method: 'POST', headers: { 'content-length': String(huge.length) }, body: huge }), VERIFY_BODY_LIMIT), BodyLimitError)

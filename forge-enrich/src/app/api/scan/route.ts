@@ -37,7 +37,7 @@ export async function POST(request: Request): Promise<Response> {
   } catch {
     return Response.json({ error: 'INVALID_DOI' }, { status: 400, headers: headers(request) })
   }
-  const limited = verificationLimiter.check(ip, dois[0])
+  const limited = verificationLimiter.checkMany(ip, dois)
   if (!limited.ok) {
     logEvent('rate_limited', { route: '/api/scan', ip, dois, scope: limited.scope })
     return Response.json({ error: 'RATE_LIMITED', scope: limited.scope }, { status: 429, headers: headers(request, { 'Retry-After': retryAfterSeconds(limited.resetAt) }) })

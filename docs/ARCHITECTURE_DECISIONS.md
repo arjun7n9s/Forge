@@ -2,7 +2,7 @@
 
 ## ADR-001: mutable drafts, immutable decisions
 
-The original spec called `edits` append-only while also requiring status transitions. Those requirements conflict. FORGE stores pending workflow state in mutable `drafts` and stores every terminal decision in immutable `edit_events` plus `audit_events`. Workspace writes insert those event rows in the same PostgreSQL transaction as the revisioned `workspace_state` snapshot. Database triggers reject UPDATE and DELETE on both event tables, and each audit row carries a SHA-256 hash chain (`previous_hash` → `content_hash` → `link_hash`). Tampering a stored content hash fails chain verification.
+The original spec called `edits` append-only while also requiring status transitions. Those requirements conflict. FORGE stores pending workflow state in the revisioned `workspace_state.snapshot` JSONB (notes and pending drafts). Every terminal decision is also inserted into immutable `edit_events` plus `audit_events` in the same PostgreSQL transaction. Database triggers reject UPDATE and DELETE on both event tables, and each audit row carries a SHA-256 hash chain (`previous_hash` → `content_hash` → `link_hash`). Tampering a stored content hash fails chain verification. SQL `notes`/`drafts` tables exist in `001_schema.sql` but are not the runtime write path.
 
 ## ADR-002: 9 personal tools
 

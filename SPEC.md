@@ -135,84 +135,14 @@ C:\Users\arjun\Desktop\Forge\
 
 ## 3. Data model (Postgres)
 
-The implemented schema is `infra/sql/001_schema.sql` plus `002_workspace_state.sql`. Mutable workflow state lives in `drafts` and the revisioned `workspace_state.snapshot`. Terminal decisions are inserted into append-only `edit_events` and `audit_events` in the same transaction as the snapshot write. Triggers reject UPDATE/DELETE. `workspace_sessions` stores hashed bearer material with server-side revocation. The historical sketch below is not what the runtime executes.
+The implemented schema is `infra/sql/001_schema.sql` plus `002_workspace_state.sql`. There is no `confirm_edit` SQL RPC and no `edits` table. Runtime writes:
 
-```sql
--- users (single-user for hackathon, schema supports multi)
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email TEXT UNIQUE NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+- `workspace_state.snapshot` — revisioned JSONB that currently holds notes, pending drafts, and the in-memory audit view used by the editor
+- `audit_events` and `edit_events` — append-only INSERTs in the same transaction as the snapshot write; triggers reject UPDATE/DELETE; each row carries a SHA-256 hash chain
+- `workspace_sessions` — hashed bearer material, expiry, and `revoked_at` for server-side logout
 
--- notes
-CREATE TABLE notes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  title TEXT NOT NULL,
-  body TEXT NOT NULL,                    -- markdown
-  content_hash TEXT NOT NULL,            -- SHA-256 of body
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX notes_user_idx ON notes(user_id);
+SQL `notes` and `drafts` tables in `001_schema.sql` are reserved for a later normalization and are not written by `workspaceStore`. Do not treat those tables as the live audit trail.
 
--- edits: append-only, no UPDATE statements
-CREATE TABLE edits (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  note_id UUID REFERENCES notes(id) ON DELETE CASCADE,
-  prev_hash TEXT NOT NULL,
-  new_hash TEXT NOT NULL,
-  agent_id TEXT NOT NULL,                -- e.g. 'openai/gpt-4o-mini'
-  user_id UUID NOT NULL,                 -- human approver
-  card_type TEXT NOT NULL,               -- corroborated | openalex_only | crossref_only | disagree | eoc_only
-  draft_payload JSONB NOT NULL,          -- the proposed edit
-  source_provenance JSONB NOT NULL,      -- {openalex: {...}, crossref: {...}}
-  status TEXT NOT NULL DEFAULT 'pending',-- 'pending' | 'confirmed' | 'rejected'
-  confirmed_at TIMESTAMPTZ,
-  rejection_reason TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX edits_note_status_idx ON edits(note_id, status);
--- APPEND-ONLY: no UPDATE allowed on edits except status transition via RPC
-
--- source quotas
-CREATE TABLE source_quotas (
-  source TEXT PRIMARY KEY,               -- 'openalex' | 'crossref'
-  used INTEGER NOT NULL DEFAULT 0,
-  limit INTEGER NOT NULL,
-  reset_at TIMESTAMPTZ NOT NULL
-);
-
--- DOI cache (global, TTL-bounded)
-CREATE TABLE doi_cache (
-  doi TEXT PRIMARY KEY,
-  status TEXT NOT NULL,                  -- 'ok' | 'retracted' | 'eoc' | 'unknown'
-  openalex_response JSONB,
-  crossref_response JSONB,             -- projected fields only; raw payload never stored
-  classified_at TIMESTAMPTZ NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL        -- TTL: 24h for ok, 1h for retracted
-);
-CREATE INDEX doi_cache_expires_idx ON doi_cache(expires_at);
-
--- audit events
-CREATE TABLE audit_events (
-  id BIGSERIAL PRIMARY KEY,
-  event_type TEXT NOT NULL,              -- 'edit.confirmed' | 'edit.rejected' |
-                                         -- 'tool.registered' | 'tool.unregistered' |
-                                         -- 'check.performed' | 'consent.granted' |
-                                         -- 'firewall.rejected'
-  agent_id TEXT,
-  user_id UUID,
-  resource_id TEXT,                      -- note_id | edit_id | tool_name | doi
-  rule_fired TEXT,                       -- 'EXPOSED_TO_WILDCARD' | 'INPUT_SCHEMA_REQUIRED' | ...
-  payload JSONB NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX audit_events_type_idx ON audit_events(event_type, created_at);
-```
-
-**No UPDATE on `edits` outside the `confirm_edit` RPC**, which writes one row to `audit_events` and transitions status to `confirmed` atomically.
 
 ---
 

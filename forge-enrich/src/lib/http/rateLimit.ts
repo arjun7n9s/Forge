@@ -28,19 +28,23 @@ export function createRateLimiter(options: { windowMs: number; ipMax: number; do
     return { ok: true, remaining: max - current.count, resetAt: current.resetAt };
   };
 
-  return {
+  const api = {
     check(ip: string, doi?: string): RateLimitResult {
+      return api.checkMany(ip, doi ? [doi] : []);
+    },
+    checkMany(ip: string, dois: readonly string[]): RateLimitResult {
       const now = Date.now();
       const ipInspect = inspect(ipBuckets, ip, options.ipMax, now);
       if (!ipInspect.ok) return { ...ipInspect, scope: 'ip' };
-      if (doi) {
+      for (const doi of dois) {
         const doiInspect = inspect(doiBuckets, `${ip}:${doi}`, options.doiMax, now);
         if (!doiInspect.ok) return { ...doiInspect, scope: 'doi' };
-        commit(doiBuckets, `${ip}:${doi}`, options.doiMax, now);
       }
+      for (const doi of dois) commit(doiBuckets, `${ip}:${doi}`, options.doiMax, now);
       return { ...commit(ipBuckets, ip, options.ipMax, now) };
     },
   };
+  return api;
 }
 
 export const verificationLimiter = createRateLimiter({ windowMs: 60_000, ipMax: 60, doiMax: 20 });
