@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: forge-enrich
+    runtime: node
+    buildCommand: npm ci && npm run build -w @forge/core && npm run build -w @forge/enrich
+    startCommand: npm run start -w @forge/enrich
+    healthCheckPath: /api/health
+    envVars:
+      - key: NEXT_PUBLIC_FORGE_ORIGIN
+        sync: false
+      - key: CONTACT_EMAIL
+        sync: false
+  - type: web
+    name: forge-personal
+    runtime: node
+    buildCommand: npm ci && npm run build -w @forge/core && npm run build -w @forge/personal
+    startCommand: npm run start -w @forge/personal
+    preDeployCommand: npm run migrate
+    healthCheckPath: /api/health
+    envVars:
+      - key: NEXT_PUBLIC_ENRICH_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: forge-db
+          property: connectionString
+      - key: FORGE_ACCESS_KEY_SHA256
+        sync: false
+      - key: FORGE_SESSION_SECRET
+        generateValue: true
+
+databases:
+  - name: forge-db
+    plan: free

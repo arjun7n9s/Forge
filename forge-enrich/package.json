@@ -1,0 +1,29 @@
+{
+  "name": "@forge/enrich",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "test": "node --test --experimental-strip-types tests/unit/*.test.ts",
+    "test:run": "node --test --experimental-strip-types tests/unit/*.test.ts",
+    "test:vitest": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "capture-cache": "node --experimental-strip-types tests/capture-cache.ts"
+  },
+  "dependencies": {
+    "@forge/core": "*",
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
